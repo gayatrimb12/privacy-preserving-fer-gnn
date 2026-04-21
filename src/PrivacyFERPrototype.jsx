@@ -127,7 +127,12 @@ export default function PrivacyFERPrototype() {
         setLoadingModel(true);
         setErrorMessage("");
 
-        const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+        if (!FaceLandmarker || !FilesetResolver) {
+  setErrorMessage("MediaPipe failed to load. Refresh the page.");
+  return;
+}
+
+const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
