@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-const { FaceLandmarker, FilesetResolver } = window;
 
 const MODEL_ASSET_PATH =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 const WASM_PATH =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
 
 const CONNECTIONS = [
   [10, 338], [338, 297], [297, 332], [332, 284], [284, 251], [251, 389],
@@ -25,10 +24,7 @@ const CONNECTIONS = [
 
   [78, 95], [95, 88], [88, 178], [178, 87], [87, 14], [14, 317], [317, 402],
   [402, 318], [318, 324], [324, 308], [78, 191], [191, 80], [80, 81],
-  [81, 82], [82, 13], [13, 312], [312, 311], [311, 310], [310, 415], [415, 308],
-
-  [168, 6], [6, 197], [197, 195], [195, 5], [5, 4], [4, 1], [1, 19],
-  [19, 94], [94, 2], [2, 164], [164, 0], [0, 11], [11, 12], [12, 13], [13, 14]
+  [81, 82], [82, 13], [13, 312], [312, 311], [311, 310], [310, 415], [415, 308]
 ];
 
 function clamp(value, min, max) {
@@ -127,14 +123,17 @@ export default function PrivacyFERPrototype() {
         setLoadingModel(true);
         setErrorMessage("");
 
-        if (!FaceLandmarker || !FilesetResolver) {
-  setErrorMessage("MediaPipe failed to load. Refresh the page.");
-  return;
-}
+        const vision = await import(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/+esm"
+        );
 
-const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
+        if (!vision?.FaceLandmarker || !vision?.FilesetResolver) {
+          throw new Error("MediaPipe module did not load correctly.");
+        }
 
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        const fileset = await vision.FilesetResolver.forVisionTasks(WASM_PATH);
+
+        const landmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
           baseOptions: {
             modelAssetPath: MODEL_ASSET_PATH,
             delegate: "GPU"
@@ -155,9 +154,7 @@ const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
       } catch (error) {
         console.error(error);
         if (!cancelled) {
-          setErrorMessage(
-            "Failed to load MediaPipe Face Landmarker. Check the dependency install and redeploy."
-          );
+          setErrorMessage("Failed to load MediaPipe model. Refresh and try again.");
         }
       } finally {
         if (!cancelled) {
@@ -293,6 +290,8 @@ const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
     ctx.globalAlpha = 0.82;
 
     for (const [a, b] of CONNECTIONS) {
+      if (!face[a] || !face[b]) continue;
+
       const p1 = shiftPoint(face[a].x, face[a].y, a, noiseLevel);
       const p2 = shiftPoint(face[b].x, face[b].y, b, noiseLevel);
 
@@ -355,11 +354,6 @@ const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
     loop();
   };
-
-  useEffect(() => {
-    if (!cameraOn) return;
-    // redraw naturally as next frame comes in
-  }, [noiseLevel, cameraOn]);
 
   return (
     <div
