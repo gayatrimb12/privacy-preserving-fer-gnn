@@ -1,50 +1,46 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const MODEL_ASSET_PATH =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-
-const WASM_PATH =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
-
-const CONNECTIONS = [
-  [10, 338], [338, 297], [297, 332], [332, 284], [284, 251], [251, 389],
-  [389, 356], [356, 454], [454, 323], [323, 361], [361, 288], [288, 397],
-  [397, 365], [365, 379], [379, 378], [378, 400], [400, 377], [377, 152],
-  [152, 148], [148, 176], [176, 149], [149, 150], [150, 136], [136, 172],
-  [172, 58], [58, 132], [132, 93], [93, 234], [234, 127], [127, 162],
-  [162, 21], [21, 54], [54, 103], [103, 67], [67, 109], [109, 10],
-
-  [33, 7], [7, 163], [163, 144], [144, 145], [145, 153], [153, 154],
-  [154, 155], [155, 133], [33, 246], [246, 161], [161, 160], [160, 159],
-  [159, 158], [158, 157], [157, 173], [173, 133],
-
-  [263, 249], [249, 390], [390, 373], [373, 374], [374, 380], [380, 381],
-  [381, 382], [382, 362], [263, 466], [466, 388], [388, 387], [387, 386],
-  [386, 385], [385, 384], [384, 398], [398, 362],
-
-  [78, 95], [95, 88], [88, 178], [178, 87], [87, 14], [14, 317], [317, 402],
-  [402, 318], [318, 324], [324, 308], [78, 191], [191, 80], [80, 81],
-  [81, 82], [82, 13], [13, 312], [312, 311], [311, 310], [310, 415], [415, 308]
+const BASE_POINTS = [
+  [0.50, 0.20],
+  [0.38, 0.26],
+  [0.62, 0.26],
+  [0.33, 0.34],
+  [0.67, 0.34],
+  [0.40, 0.38],
+  [0.60, 0.38],
+  [0.43, 0.50],
+  [0.57, 0.50],
+  [0.50, 0.58],
+  [0.36, 0.66],
+  [0.44, 0.71],
+  [0.50, 0.73],
+  [0.56, 0.71],
+  [0.64, 0.66],
+  [0.30, 0.45],
+  [0.70, 0.45],
+  [0.50, 0.82]
 ];
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
+const EDGES = [
+  [0, 1], [0, 2],
+  [1, 3], [2, 4],
+  [3, 5], [4, 6],
+  [5, 7], [6, 8],
+  [7, 9], [8, 9],
+  [10, 11], [11, 12], [12, 13], [13, 14],
+  [15, 5], [16, 6],
+  [9, 12], [12, 17],
+  [7, 11], [8, 13]
+];
+
+function jitter(value, amount) {
+  return value + (Math.random() - 0.5) * amount;
 }
 
-function shiftPoint(x, y, index, noiseAmount) {
-  if (!noiseAmount) return { x, y };
-  const dx = ((index % 5) - 2) * noiseAmount * 0.0012;
-  const dy = (((index + 2) % 5) - 2) * noiseAmount * 0.0012;
-  return {
-    x: clamp(x + dx, 0, 1),
-    y: clamp(y + dy, 0, 1)
-  };
-}
-
-function StatusChip({ label, active = false, warning = false }) {
-  const background = warning ? "#fff7ed" : active ? "#eff6ff" : "#f8fafc";
-  const border = warning ? "#fdba74" : active ? "#bfdbfe" : "#e2e8f0";
+function StatusPill({ label, active = false, warning = false }) {
+  const bg = warning ? "#fff7ed" : active ? "#eff6ff" : "#f8fafc";
   const color = warning ? "#c2410c" : active ? "#1d4ed8" : "#475569";
+  const border = warning ? "#fdba74" : active ? "#bfdbfe" : "#e2e8f0";
 
   return (
     <div
@@ -52,11 +48,11 @@ function StatusChip({ label, active = false, warning = false }) {
         padding: "10px 12px",
         borderRadius: "999px",
         border: `1px solid ${border}`,
-        background,
+        background: bg,
         color,
+        fontSize: "0.85rem",
         fontWeight: 700,
-        fontSize: "0.83rem",
-        whiteSpace: "nowrap"
+        whiteSpace: "nowrap",
       }}
     >
       {label}
@@ -71,13 +67,13 @@ function MetricCard({ label, value, subtext }) {
         background: "#ffffff",
         border: "1px solid #e2e8f0",
         borderRadius: "18px",
-        padding: "16px"
+        padding: "16px",
       }}
     >
       <div style={{ color: "#64748b", fontSize: "0.86rem", marginBottom: "8px" }}>
         {label}
       </div>
-      <div style={{ fontWeight: 800, fontSize: "1.5rem", marginBottom: "6px" }}>
+      <div style={{ fontWeight: 800, fontSize: "1.4rem", marginBottom: "6px" }}>
         {value}
       </div>
       <div style={{ color: "#475569", fontSize: "0.92rem", lineHeight: 1.6 }}>
@@ -90,109 +86,51 @@ function MetricCard({ label, value, subtext }) {
 export default function PrivacyFERPrototype() {
   const videoRef = useRef(null);
   const graphCanvasRef = useRef(null);
-  const animationRef = useRef(null);
   const streamRef = useRef(null);
-  const faceLandmarkerRef = useRef(null);
-  const lastVideoTimeRef = useRef(-1);
+  const rafRef = useRef(null);
 
-  const [modelReady, setModelReady] = useState(false);
-  const [loadingModel, setLoadingModel] = useState(true);
   const [cameraOn, setCameraOn] = useState(false);
-  const [faceDetected, setFaceDetected] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(true);
-  const [noiseLevel, setNoiseLevel] = useState(0);
-  const [landmarkCount, setLandmarkCount] = useState(0);
+  const [noiseLevel, setNoiseLevel] = useState(2);
+  const [graphQuality, setGraphQuality] = useState(88);
   const [errorMessage, setErrorMessage] = useState("");
   const [frameSize, setFrameSize] = useState({ width: 640, height: 480 });
-  const [graphQuality, setGraphQuality] = useState(100);
 
   const systemSummary = useMemo(() => {
     if (!cameraOn) return "Camera inactive";
-    if (!modelReady) return "Loading landmark model";
-    if (!faceDetected) return "No face detected";
-    return "Face detected and graph generated";
-  }, [cameraOn, modelReady, faceDetected]);
+    return "Prototype running";
+  }, [cameraOn]);
 
   const exposureLevel = privacyMode ? "Reduced" : "Visible";
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function initializeModel() {
-      try {
-        setLoadingModel(true);
-        setErrorMessage("");
-
-        const vision = await import(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/+esm"
-        );
-
-        if (!vision?.FaceLandmarker || !vision?.FilesetResolver) {
-          throw new Error("MediaPipe module did not load correctly.");
-        }
-
-        const fileset = await vision.FilesetResolver.forVisionTasks(WASM_PATH);
-
-        const landmarker = await vision.FaceLandmarker.createFromOptions(fileset, {
-          baseOptions: {
-            modelAssetPath: MODEL_ASSET_PATH,
-            delegate: "GPU"
-          },
-          runningMode: "VIDEO",
-          numFaces: 1,
-          outputFaceBlendshapes: false,
-          outputFacialTransformationMatrixes: false,
-          minFaceDetectionConfidence: 0.5,
-          minFacePresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5
-        });
-
-        if (!cancelled) {
-          faceLandmarkerRef.current = landmarker;
-          setModelReady(true);
-        }
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setErrorMessage("Failed to load MediaPipe model. Refresh and try again.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingModel(false);
-        }
-      }
-    }
-
-    initializeModel();
-
     return () => {
-      cancelled = true;
+      stopCamera();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    return () => {
-      stopCamera();
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
-  }, []);
+    setGraphQuality(Math.max(58, 96 - noiseLevel * 4));
+  }, [noiseLevel]);
 
   const clearCanvas = () => {
     const canvas = graphCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = "#94a3b8";
     ctx.font = "600 18px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("Graph view inactive", canvas.width / 2, canvas.height / 2);
+    ctx.fillText("Graph view inactive", width / 2, height / 2);
   };
 
   const stopCamera = () => {
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    animationRef.current = null;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
 
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -205,14 +143,8 @@ export default function PrivacyFERPrototype() {
     }
 
     setCameraOn(false);
-    setFaceDetected(false);
-    setLandmarkCount(0);
-    setGraphQuality(100);
-
-    if (graphCanvasRef.current) {
-      const canvas = graphCanvasRef.current;
-      canvas.width = frameSize.width;
-      canvas.height = frameSize.height;
+    const canvas = graphCanvasRef.current;
+    if (canvas) {
       clearCanvas();
     }
   };
@@ -221,22 +153,16 @@ export default function PrivacyFERPrototype() {
     try {
       setErrorMessage("");
 
-      if (!modelReady) {
-        setErrorMessage("Model is still loading. Try again in a moment.");
-        return;
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
           width: { ideal: 960 },
-          height: { ideal: 720 }
+          height: { ideal: 720 },
         },
-        audio: false
+        audio: false,
       });
 
       streamRef.current = stream;
-
       const video = videoRef.current;
       video.srcObject = stream;
       await video.play();
@@ -252,15 +178,14 @@ export default function PrivacyFERPrototype() {
       }
 
       setCameraOn(true);
-      lastVideoTimeRef.current = -1;
-      runInferenceLoop();
+      runGraphLoop();
     } catch (error) {
       console.error(error);
       setErrorMessage("Camera access failed. Please allow webcam permission and try again.");
     }
   };
 
-  const drawGraph = (landmarks) => {
+  const drawGraph = () => {
     const canvas = graphCanvasRef.current;
     if (!canvas) return;
 
@@ -275,83 +200,58 @@ export default function PrivacyFERPrototype() {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
 
-    if (!landmarks || landmarks.length === 0) {
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "600 18px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("Waiting for face landmarks", width / 2, height / 2);
-      return;
-    }
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const faceW = width * 0.34;
+    const faceH = height * 0.52;
+    const noise = noiseLevel * 0.01;
 
-    const face = landmarks[0];
+    const points = BASE_POINTS.map(([px, py]) => {
+      const x = centerX + (px - 0.5) * faceW * 2;
+      const y = centerY + (py - 0.5) * faceH * 2;
+      return {
+        x: jitter(x, faceW * noise),
+        y: jitter(y, faceH * noise),
+      };
+    });
 
     ctx.strokeStyle = "#2563eb";
-    ctx.lineWidth = 1.5;
-    ctx.globalAlpha = 0.82;
+    ctx.lineWidth = 1.8;
+    ctx.globalAlpha = 0.85;
 
-    for (const [a, b] of CONNECTIONS) {
-      if (!face[a] || !face[b]) continue;
-
-      const p1 = shiftPoint(face[a].x, face[a].y, a, noiseLevel);
-      const p2 = shiftPoint(face[b].x, face[b].y, b, noiseLevel);
-
+    EDGES.forEach(([a, b]) => {
       ctx.beginPath();
-      ctx.moveTo((1 - p1.x) * width, p1.y * height);
-      ctx.lineTo((1 - p2.x) * width, p2.y * height);
+      ctx.moveTo(points[a].x, points[a].y);
+      ctx.lineTo(points[b].x, points[b].y);
       ctx.stroke();
-    }
+    });
 
     ctx.globalAlpha = 1;
     ctx.fillStyle = "#0f172a";
 
-    for (let i = 0; i < face.length; i += 3) {
-      const p = shiftPoint(face[i].x, face[i].y, i, noiseLevel);
+    points.forEach((p) => {
       ctx.beginPath();
-      ctx.arc((1 - p.x) * width, p.y * height, 2.15, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
       ctx.fill();
-    }
+    });
 
     ctx.fillStyle = "rgba(37,99,235,0.08)";
-    ctx.fillRect(16, 16, 212, 34);
+    ctx.fillRect(16, 16, 228, 34);
     ctx.fillStyle = "#1d4ed8";
     ctx.font = "700 14px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("graph-based representation", 28, 38);
+    ctx.fillText("graph-based privacy abstraction", 28, 38);
+
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(centerX - faceW * 0.8, centerY - faceH * 0.9, faceW * 1.6, faceH * 1.8);
   };
 
-  const runInferenceLoop = () => {
-    const video = videoRef.current;
-    const landmarker = faceLandmarkerRef.current;
-    if (!video || !landmarker) return;
-
+  const runGraphLoop = () => {
     const loop = () => {
-      if (!videoRef.current || !faceLandmarkerRef.current) return;
-
-      if (video.readyState >= 2) {
-        const currentTime = video.currentTime;
-
-        if (currentTime !== lastVideoTimeRef.current) {
-          lastVideoTimeRef.current = currentTime;
-
-          const result = faceLandmarkerRef.current.detectForVideo(
-            video,
-            performance.now()
-          );
-
-          const landmarks = result.faceLandmarks || [];
-          const hasFace = landmarks.length > 0;
-
-          setFaceDetected(hasFace);
-          setLandmarkCount(hasFace ? landmarks[0].length : 0);
-          setGraphQuality(hasFace ? Math.max(58, 100 - noiseLevel * 3) : 0);
-
-          drawGraph(landmarks);
-        }
-      }
-
-      animationRef.current = requestAnimationFrame(loop);
+      drawGraph();
+      rafRef.current = requestAnimationFrame(loop);
     };
-
     loop();
   };
 
@@ -360,30 +260,30 @@ export default function PrivacyFERPrototype() {
       style={{
         minHeight: "100vh",
         background: "#f8fafc",
+        color: "#0f172a",
         fontFamily:
           'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-        color: "#0f172a"
       }}
     >
       <div
         style={{
           maxWidth: "1240px",
           margin: "0 auto",
-          padding: "28px 20px 48px"
+          padding: "32px 20px 48px",
         }}
       >
         <div
           style={{
+            marginBottom: "24px",
             display: "flex",
             flexWrap: "wrap",
             gap: "10px",
-            marginBottom: "20px"
           }}
         >
-          <StatusChip label={loadingModel ? "Loading model" : "Model ready"} active={modelReady} />
-          <StatusChip label={cameraOn ? "Camera active" : "Camera inactive"} active={cameraOn} />
-          <StatusChip label={faceDetected ? "Face detected" : "No face"} active={faceDetected} />
-          <StatusChip
+          <StatusPill label="Prototype ready" active />
+          <StatusPill label={cameraOn ? "Camera active" : "Camera inactive"} active={cameraOn} />
+          <StatusPill label="Graph abstraction" active />
+          <StatusPill
             label={privacyMode ? "Privacy mode on" : "Privacy mode off"}
             active={privacyMode}
             warning={!privacyMode}
@@ -395,50 +295,84 @@ export default function PrivacyFERPrototype() {
             background: "#ffffff",
             border: "1px solid #e2e8f0",
             borderRadius: "28px",
-            padding: "26px",
-            marginBottom: "20px",
-            boxShadow: "0 10px 30px rgba(15,23,42,0.05)"
+            padding: "28px",
+            boxShadow: "0 10px 30px rgba(15,23,42,0.05)",
+            marginBottom: "24px",
           }}
         >
           <div
             style={{
-              display: "inline-block",
-              padding: "8px 12px",
-              borderRadius: "999px",
-              background: "#eff6ff",
-              color: "#1d4ed8",
-              fontWeight: 700,
-              fontSize: "0.82rem",
-              marginBottom: "14px"
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: "20px",
+              flexWrap: "wrap",
             }}
           >
-            Professional V1 prototype
+            <div style={{ maxWidth: "760px" }}>
+              <div
+                style={{
+                  display: "inline-block",
+                  padding: "8px 12px",
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                  borderRadius: "999px",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  marginBottom: "14px",
+                }}
+              >
+                Safe fallback demo
+              </div>
+
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: "clamp(2rem, 4vw, 3.4rem)",
+                  lineHeight: 1.05,
+                }}
+              >
+                Privacy-Preserving Facial Analysis
+              </h1>
+
+              <p
+                style={{
+                  marginTop: "14px",
+                  marginBottom: 0,
+                  color: "#475569",
+                  lineHeight: 1.8,
+                  fontSize: "1rem",
+                  maxWidth: "720px",
+                }}
+              >
+                This working prototype demonstrates how a facial recognition pipeline can
+                shift from raw identity-heavy input to a graph-style structural
+                representation for privacy-aware analysis.
+              </p>
+            </div>
+
+            <div
+              style={{
+                minWidth: "250px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "20px",
+                padding: "18px",
+                background: "#f8fafc",
+              }}
+            >
+              <div style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "8px" }}>
+                System summary
+              </div>
+              <div style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: "10px" }}>
+                {systemSummary}
+              </div>
+              <div style={{ fontSize: "0.95rem", color: "#475569", lineHeight: 1.7 }}>
+                Graph quality: {graphQuality}% <br />
+                Raw exposure: {exposureLevel} <br />
+                Noise level: {noiseLevel}
+              </div>
+            </div>
           </div>
-
-          <h1
-            style={{
-              margin: 0,
-              fontSize: "clamp(2rem, 4.2vw, 3.6rem)",
-              lineHeight: 1.05
-            }}
-          >
-            Facial Recognition under Privacy Constraints
-          </h1>
-
-          <p
-            style={{
-              marginTop: "12px",
-              marginBottom: 0,
-              maxWidth: "860px",
-              color: "#475569",
-              lineHeight: 1.8,
-              fontSize: "1rem"
-            }}
-          >
-            This prototype evaluates identity leakage by comparing live raw facial input
-            with a graph-based representation built from facial landmarks. The goal is
-            to explore how a facial pipeline can reduce reliance on identity-heavy data.
-          </p>
         </div>
 
         <div
@@ -446,7 +380,7 @@ export default function PrivacyFERPrototype() {
             display: "grid",
             gridTemplateColumns: "minmax(280px, 320px) 1fr",
             gap: "20px",
-            alignItems: "start"
+            alignItems: "start",
           }}
         >
           <div
@@ -455,10 +389,10 @@ export default function PrivacyFERPrototype() {
               border: "1px solid #e2e8f0",
               borderRadius: "24px",
               padding: "20px",
-              boxShadow: "0 10px 30px rgba(15,23,42,0.04)"
+              boxShadow: "0 10px 30px rgba(15,23,42,0.04)",
             }}
           >
-            <div style={{ fontWeight: 800, fontSize: "1rem", marginBottom: "16px" }}>
+            <div style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "14px" }}>
               Controls
             </div>
 
@@ -473,7 +407,7 @@ export default function PrivacyFERPrototype() {
                   color: "#ffffff",
                   cursor: "pointer",
                   fontWeight: 700,
-                  fontSize: "0.95rem"
+                  fontSize: "0.95rem",
                 }}
               >
                 {cameraOn ? "Stop camera" : "Enable camera"}
@@ -489,7 +423,7 @@ export default function PrivacyFERPrototype() {
                   color: "#0f172a",
                   cursor: "pointer",
                   fontWeight: 700,
-                  fontSize: "0.95rem"
+                  fontSize: "0.95rem",
                 }}
               >
                 {privacyMode ? "Show raw input" : "Hide raw input"}
@@ -498,18 +432,18 @@ export default function PrivacyFERPrototype() {
 
             <div style={{ marginTop: "18px" }}>
               <label
-                htmlFor="noise-slider"
+                htmlFor="noise"
                 style={{
                   display: "block",
                   fontWeight: 700,
                   fontSize: "0.92rem",
-                  marginBottom: "10px"
+                  marginBottom: "10px",
                 }}
               >
-                Noise simulation: {noiseLevel}
+                Graph noise simulation: {noiseLevel}
               </label>
               <input
-                id="noise-slider"
+                id="noise"
                 type="range"
                 min="0"
                 max="12"
@@ -528,13 +462,13 @@ export default function PrivacyFERPrototype() {
                 background: "#f8fafc",
                 border: "1px solid #e2e8f0",
                 color: "#475569",
-                fontSize: "0.93rem",
-                lineHeight: 1.7
+                lineHeight: 1.7,
+                fontSize: "0.94rem",
               }}
             >
               Pipeline:
               <br />
-              raw face → landmarks → graph abstraction → reduced exposure
+              raw face → abstracted nodes → graph structure → reduced identity exposure
             </div>
 
             {errorMessage && (
@@ -546,8 +480,8 @@ export default function PrivacyFERPrototype() {
                   background: "#fff7ed",
                   border: "1px solid #fdba74",
                   color: "#9a3412",
+                  lineHeight: 1.7,
                   fontSize: "0.92rem",
-                  lineHeight: 1.7
                 }}
               >
                 {errorMessage}
@@ -559,7 +493,7 @@ export default function PrivacyFERPrototype() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-              gap: "20px"
+              gap: "20px",
             }}
           >
             <div
@@ -568,11 +502,11 @@ export default function PrivacyFERPrototype() {
                 border: "1px solid #e2e8f0",
                 borderRadius: "24px",
                 padding: "18px",
-                boxShadow: "0 10px 30px rgba(15,23,42,0.04)"
+                boxShadow: "0 10px 30px rgba(15,23,42,0.04)",
               }}
             >
               <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontWeight: 800, fontSize: "1rem" }}>Raw input panel</div>
+                <div style={{ fontWeight: 700, fontSize: "1rem" }}>Raw input panel</div>
                 <div style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "4px" }}>
                   Live webcam feed
                 </div>
@@ -585,7 +519,7 @@ export default function PrivacyFERPrototype() {
                   overflow: "hidden",
                   border: "1px solid #dbe4f0",
                   background: "#0f172a",
-                  aspectRatio: "4 / 3"
+                  aspectRatio: "4 / 3",
                 }}
               >
                 <video
@@ -598,9 +532,9 @@ export default function PrivacyFERPrototype() {
                     height: "100%",
                     objectFit: "cover",
                     transform: "scaleX(-1)",
-                    filter: privacyMode ? "blur(14px) brightness(0.66)" : "none",
+                    filter: privacyMode ? "blur(14px) brightness(0.68)" : "none",
                     opacity: cameraOn ? 1 : 0.12,
-                    transition: "filter 180ms ease, opacity 180ms ease"
+                    transition: "filter 180ms ease, opacity 180ms ease",
                   }}
                 />
                 {!cameraOn && (
@@ -612,7 +546,8 @@ export default function PrivacyFERPrototype() {
                       alignItems: "center",
                       justifyContent: "center",
                       color: "#cbd5e1",
-                      fontWeight: 700
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
                     }}
                   >
                     Camera inactive
@@ -627,13 +562,13 @@ export default function PrivacyFERPrototype() {
                 border: "1px solid #e2e8f0",
                 borderRadius: "24px",
                 padding: "18px",
-                boxShadow: "0 10px 30px rgba(15,23,42,0.04)"
+                boxShadow: "0 10px 30px rgba(15,23,42,0.04)",
               }}
             >
               <div style={{ marginBottom: "12px" }}>
-                <div style={{ fontWeight: 800, fontSize: "1rem" }}>Graph representation panel</div>
+                <div style={{ fontWeight: 700, fontSize: "1rem" }}>Graph abstraction panel</div>
                 <div style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "4px" }}>
-                  Structural facial representation
+                  Structural representation for downstream analysis
                 </div>
               </div>
 
@@ -643,7 +578,7 @@ export default function PrivacyFERPrototype() {
                   overflow: "hidden",
                   border: "1px solid #dbe4f0",
                   background: "#ffffff",
-                  aspectRatio: "4 / 3"
+                  aspectRatio: "4 / 3",
                 }}
               >
                 <canvas
@@ -653,7 +588,7 @@ export default function PrivacyFERPrototype() {
                   style={{
                     width: "100%",
                     height: "100%",
-                    display: "block"
+                    display: "block",
                   }}
                 />
               </div>
@@ -663,10 +598,10 @@ export default function PrivacyFERPrototype() {
 
         <div
           style={{
-            marginTop: "20px",
+            marginTop: "24px",
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "14px"
+            gap: "16px",
           }}
         >
           <MetricCard
@@ -675,14 +610,14 @@ export default function PrivacyFERPrototype() {
             subtext="Current pipeline state."
           />
           <MetricCard
-            label="Landmarks"
-            value={landmarkCount}
-            subtext="Detected structural points."
+            label="Representation"
+            value="Graph-based"
+            subtext="Structure emphasized over identity-rich detail."
           />
           <MetricCard
             label="Graph quality"
             value={`${graphQuality}%`}
-            subtext="Approximate structural stability under noise."
+            subtext="Approximate structural stability under simulated noise."
           />
           <MetricCard
             label="Identity exposure"
