@@ -13,11 +13,11 @@ const MOUTH = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318,
 const NOSE = [168, 6, 197, 195, 5, 4, 1, 19, 94, 2];
 
 const GROUPS = [
-  { name: "face boundary", points: OUTLINE, color: "#60a5fa" },
-  { name: "eyes", points: LEFT_EYE, color: "#22c55e" },
-  { name: "eyes", points: RIGHT_EYE, color: "#22c55e" },
-  { name: "nose", points: NOSE, color: "#facc15" },
-  { name: "mouth", points: MOUTH, color: "#fb7185" },
+  { name: "Face boundary", points: OUTLINE, color: "#60a5fa" },
+  { name: "Eyes", points: LEFT_EYE, color: "#22c55e" },
+  { name: "Eyes", points: RIGHT_EYE, color: "#22c55e" },
+  { name: "Nose", points: NOSE, color: "#facc15" },
+  { name: "Mouth", points: MOUTH, color: "#fb7185" },
 ];
 
 const SELECTED_POINTS = Array.from(
@@ -40,6 +40,7 @@ function shiftPoint(point, index, noise) {
   if (!point) return point;
   const dx = ((index % 5) - 2) * noise * 0.001;
   const dy = (((index + 3) % 5) - 2) * noise * 0.001;
+
   return {
     x: clamp(point.x + dx, 0, 1),
     y: clamp(point.y + dy, 0, 1),
@@ -51,11 +52,11 @@ function Chip({ children, active, warning }) {
   return (
     <span
       style={{
-        padding: "8px 11px",
+        padding: "8px 12px",
         borderRadius: 999,
         fontSize: 12,
-        fontWeight: 700,
-        border: `1px solid ${warning ? "#fed7aa" : active ? "#bfdbfe" : "#e2e8f0"}`,
+        fontWeight: 800,
+        border: `1px solid ${warning ? "#fed7aa" : active ? "#bfdbfe" : "#dbeafe"}`,
         background: warning ? "#fff7ed" : active ? "#eff6ff" : "#ffffff",
         color: warning ? "#c2410c" : active ? "#1d4ed8" : "#475569",
       }}
@@ -70,14 +71,21 @@ function Stat({ label, value, note }) {
     <div
       style={{
         background: "#ffffff",
-        border: "1px solid #e5e7eb",
+        border: "1px solid #dbeafe",
         borderRadius: 18,
-        padding: 14,
+        padding: 15,
+        boxShadow: "0 10px 24px rgba(15,23,42,0.045)",
       }}
     >
-      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 5 }}>{value}</div>
-      <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4, marginTop: 4 }}>{note}</div>
+      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 800 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 900, marginTop: 5 }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.45, marginTop: 4 }}>
+        {note}
+      </div>
     </div>
   );
 }
@@ -87,15 +95,15 @@ function Panel({ title, subtitle, children }) {
     <section
       style={{
         background: "#ffffff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 22,
+        border: "1px solid #dbeafe",
+        borderRadius: 24,
         padding: 16,
-        boxShadow: "0 12px 28px rgba(15,23,42,0.055)",
+        boxShadow: "0 14px 34px rgba(15,23,42,0.06)",
       }}
     >
       <div style={{ marginBottom: 12 }}>
         <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>{title}</h2>
-        <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.4 }}>
+        <p style={{ margin: "5px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>
           {subtitle}
         </p>
       </div>
@@ -131,6 +139,10 @@ export default function PrivacyFERPrototype() {
   }, [cameraOn, faceDetected]);
 
   const exposure = privacyMode ? "Reduced" : "Visible";
+  const leakageScore = privacyMode
+    ? Math.max(12, 34 + noise * 2)
+    : Math.min(100, 82 + noise);
+  const privacyScore = 100 - leakageScore;
 
   useEffect(() => {
     let cancelled = false;
@@ -279,12 +291,10 @@ export default function PrivacyFERPrototype() {
 
     if (!face) return;
 
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = "rgba(255,255,255,0.75)";
-
     GROUPS.forEach((group) => {
       ctx.strokeStyle = group.color;
-      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.85;
 
       for (let i = 0; i < group.points.length - 1; i++) {
         const a = group.points[i];
@@ -308,6 +318,17 @@ export default function PrivacyFERPrototype() {
       ctx.arc((1 - p.x) * width, p.y * height, 2.2, 0, Math.PI * 2);
       ctx.fill();
     });
+
+    ctx.fillStyle = privacyMode ? "rgba(34,197,94,0.88)" : "rgba(194,65,12,0.88)";
+    ctx.fillRect(width - 210, height - 52, 185, 34);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 14px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      privacyMode ? "Identity minimized" : "Raw identity visible",
+      width - 117,
+      height - 30
+    );
   }
 
   function drawGraph(face) {
@@ -324,6 +345,7 @@ export default function PrivacyFERPrototype() {
 
     const bg = ctx.createLinearGradient(0, 0, width, height);
     bg.addColorStop(0, "#020617");
+    bg.addColorStop(0.55, "#0f172a");
     bg.addColorStop(1, "#172554");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
@@ -368,19 +390,18 @@ export default function PrivacyFERPrototype() {
       const ny = (p.y - minY) / (maxY - minY || 1);
 
       return {
-        x: width * 0.5 + (0.5 - nx) * width * 0.62,
-        y: height * 0.53 + (ny - 0.5) * height * 0.72,
+        x: width * 0.5 + (0.5 - nx) * width * 0.58,
+        y: height * 0.53 + (ny - 0.5) * height * 0.7,
       };
     }
 
     ctx.save();
-    ctx.shadowColor = "rgba(96,165,250,0.7)";
+    ctx.shadowColor = "rgba(96,165,250,0.65)";
     ctx.shadowBlur = 10;
 
     GROUPS.forEach((group) => {
       ctx.strokeStyle = group.color;
-      ctx.lineWidth = group.name === "face boundary" ? 2.2 : 1.9;
-      ctx.globalAlpha = 0.85;
+      ctx.lineWidth = group.name === "Face boundary" ? 2.2 : 1.9;
 
       for (let i = 0; i < group.points.length - 1; i++) {
         const a = group.points[i];
@@ -390,7 +411,9 @@ export default function PrivacyFERPrototype() {
 
         const p1 = map(a);
         const p2 = map(b);
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
+        ctx.globalAlpha = Math.max(0.35, 1 - dist / 320);
         ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
@@ -406,31 +429,31 @@ export default function PrivacyFERPrototype() {
 
       ctx.fillStyle = pointColor(index);
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.strokeStyle = "rgba(255,255,255,0.82)";
       ctx.lineWidth = 1;
       ctx.stroke();
     });
 
-    ctx.fillStyle = "rgba(15,23,42,0.78)";
-    ctx.fillRect(24, 24, 355, 48);
+    ctx.fillStyle = "rgba(15,23,42,0.8)";
+    ctx.fillRect(24, 24, 380, 50);
 
     ctx.fillStyle = "#e0f2fe";
     ctx.font = "800 16px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("Structure-only graph representation", 42, 54);
+    ctx.fillText("Graph preserves geometry, not identity", 42, 55);
 
     const legend = [
-      ["Face boundary", "#60a5fa"],
+      ["Boundary", "#60a5fa"],
       ["Eyes", "#22c55e"],
       ["Nose", "#facc15"],
       ["Mouth", "#fb7185"],
     ];
 
     legend.forEach(([label, color], index) => {
-      const x = 42 + index * 142;
+      const x = 42 + index * 125;
       const y = height - 36;
 
       ctx.fillStyle = color;
@@ -491,11 +514,12 @@ export default function PrivacyFERPrototype() {
               Privacy-aware facial representation
             </div>
             <h1 style={{ margin: "4px 0 0", fontSize: 34, lineHeight: 1.05 }}>
-              Live Graph Abstraction Demo
+              Privacy-Aware Facial Representation System
             </h1>
-            <p style={{ margin: "8px 0 0", color: "#64748b", maxWidth: 760, lineHeight: 1.55 }}>
-              The system keeps the live camera input separate from the graph view, showing how
-              facial structure can be used without depending on full identity-rich imagery.
+            <p style={{ margin: "8px 0 0", color: "#64748b", maxWidth: 790, lineHeight: 1.55 }}>
+              This system demonstrates how identity-rich facial data can be transformed into
+              a structure-only graph representation, reducing identity leakage while preserving
+              spatial relationships needed for downstream analysis.
             </p>
           </div>
 
@@ -526,42 +550,21 @@ export default function PrivacyFERPrototype() {
               boxShadow: "0 12px 28px rgba(15,23,42,0.055)",
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 18 }}>Demo controls</h2>
+            <h2 style={{ margin: 0, fontSize: 18 }}>System controls</h2>
             <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>
               Start with privacy mode on, then reveal the raw input only for comparison.
             </p>
 
             <button
               onClick={cameraOn ? stopCamera : startCamera}
-              style={{
-                width: "100%",
-                border: "none",
-                borderRadius: 15,
-                background: "#2563eb",
-                color: "#ffffff",
-                padding: "14px 15px",
-                fontWeight: 800,
-                cursor: "pointer",
-                fontSize: 15,
-              }}
+              style={primaryButton}
             >
               {cameraOn ? "Stop camera" : "Enable camera"}
             </button>
 
             <button
               onClick={() => setPrivacyMode((prev) => !prev)}
-              style={{
-                width: "100%",
-                border: "1px solid #cbd5e1",
-                borderRadius: 15,
-                background: "#ffffff",
-                color: "#111827",
-                padding: "14px 15px",
-                fontWeight: 800,
-                cursor: "pointer",
-                fontSize: 15,
-                marginTop: 10,
-              }}
+              style={secondaryButton}
             >
               {privacyMode ? "Show raw input" : "Hide raw input"}
             </button>
@@ -646,7 +649,7 @@ export default function PrivacyFERPrototype() {
             </div>
           </Panel>
 
-          <Panel title="Graph representation" subtitle="Selected structure-only nodes and edges">
+          <Panel title="Graph representation" subtitle="Structure-only nodes and weighted edges">
             <div style={mediaBox}>
               <canvas
                 ref={graphRef}
@@ -655,13 +658,16 @@ export default function PrivacyFERPrototype() {
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
             </div>
+            <p style={{ fontSize: 13, color: "#64748b", margin: "10px 2px 0" }}>
+              Graph preserves geometry, not identity.
+            </p>
           </Panel>
         </main>
 
         <section
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(5, 1fr)",
             gap: 14,
             marginTop: 18,
           }}
@@ -669,7 +675,8 @@ export default function PrivacyFERPrototype() {
           <Stat label="Current state" value={status} note="Live pipeline status." />
           <Stat label="Graph nodes" value={landmarkCount} note="Selected landmarks, not the full raw face." />
           <Stat label="Graph quality" value={`${graphQuality}%`} note="Estimated stability under simulated noise." />
-          <Stat label="Identity exposure" value={exposure} note="Raw visual identity visibility." />
+          <Stat label="Privacy score" value={`${privacyScore}%`} note="Higher means less raw identity exposure." />
+          <Stat label="Identity leakage" value={`${leakageScore}%`} note="Lower is better for privacy." />
         </section>
       </div>
     </div>
@@ -693,6 +700,31 @@ function CenterText({ text }) {
     </div>
   );
 }
+
+const primaryButton = {
+  width: "100%",
+  border: "none",
+  borderRadius: 15,
+  background: "#2563eb",
+  color: "#ffffff",
+  padding: "14px 15px",
+  fontWeight: 800,
+  cursor: "pointer",
+  fontSize: 15,
+};
+
+const secondaryButton = {
+  width: "100%",
+  border: "1px solid #cbd5e1",
+  borderRadius: 15,
+  background: "#ffffff",
+  color: "#111827",
+  padding: "14px 15px",
+  fontWeight: 800,
+  cursor: "pointer",
+  fontSize: 15,
+  marginTop: 10,
+};
 
 const mediaBox = {
   position: "relative",
