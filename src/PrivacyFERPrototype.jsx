@@ -552,14 +552,14 @@ export default function PrivacyFERPrototype() {
         }}>
           <div>
             <div style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
-              Privacy-aware facial representation
+              Privacy aware facial representation
             </div>
             <h1 style={{ margin: "4px 0 0", fontSize: 34, lineHeight: 1.05 }}>
-              Privacy-Aware Facial Representation System
+              Privacy Aware Facial Representation System
             </h1>
             <p style={{ margin: "8px 0 0", color: "#64748b", maxWidth: 840, lineHeight: 1.55 }}>
-              This system transforms identity-rich facial input into a structure-only graph,
-              comparing raw exposure against graph-based representation in real time.
+              This system transforms identity facial input into a structure only graph,
+              comparing raw exposure against graph based representation in real time.
             </p>
           </div>
 
@@ -637,7 +637,7 @@ export default function PrivacyFERPrototype() {
               fontSize: 13,
               lineHeight: 1.65,
             }}>
-              <b style={{ color: "#ffffff" }}>Real-time comparison</b>
+              <b style={{ color: "#ffffff" }}>Comparison</b>
               <br />
               Raw exposure: {rawExposure}%<br />
               Graph exposure: {graphExposure}%<br />
@@ -660,7 +660,7 @@ export default function PrivacyFERPrototype() {
             )}
           </aside>
 
-          <Panel title="Raw input" subtitle="Identity-rich webcam stream with selected facial structure overlay">
+          <Panel title="Raw input" subtitle="Identity webcam stream with selected facial structure overlay">
             <div style={mediaBox}>
               <video
                 ref={videoRef}
@@ -720,7 +720,7 @@ export default function PrivacyFERPrototype() {
             boxShadow: "0 10px 24px rgba(15,23,42,0.045)",
           }}>
             <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 12 }}>
-              Raw vs Graph: real-time exposure comparison
+              Raw vs Graph: exposure comparison
             </div>
             <Meter
               label="Raw image exposure"
