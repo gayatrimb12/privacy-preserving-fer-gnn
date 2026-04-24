@@ -6,70 +6,58 @@ const MODEL_ASSET_PATH =
 const MP_VERSION = "0.10.3";
 const WASM_PATH = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}/wasm`;
 
-const CONNECTIONS = [
-  [10, 338], [338, 297], [297, 332], [332, 284], [284, 251], [251, 389],
-  [389, 356], [356, 454], [454, 323], [323, 361], [361, 288], [288, 397],
-  [397, 365], [365, 379], [379, 378], [378, 400], [400, 377], [377, 152],
-  [152, 148], [148, 176], [176, 149], [149, 150], [150, 136], [136, 172],
-  [172, 58], [58, 132], [132, 93], [93, 234], [234, 127], [127, 162],
-  [162, 21], [21, 54], [54, 103], [103, 67], [67, 109], [109, 10],
-  [33, 7], [7, 163], [163, 144], [144, 145], [145, 153], [153, 154],
-  [154, 155], [155, 133], [33, 246], [246, 161], [161, 160], [160, 159],
-  [159, 158], [158, 157], [157, 173], [173, 133],
-  [263, 249], [249, 390], [390, 373], [373, 374], [374, 380], [380, 381],
-  [381, 382], [382, 362], [263, 466], [466, 388], [388, 387], [387, 386],
-  [386, 385], [385, 384], [384, 398], [398, 362],
-  [61, 146], [146, 91], [91, 181], [181, 84], [84, 17], [17, 314],
-  [314, 405], [405, 321], [321, 375], [375, 291],
-  [78, 95], [95, 88], [88, 178], [178, 87], [87, 14], [14, 317],
-  [317, 402], [402, 318], [318, 324], [324, 308],
-  [70, 63], [63, 105], [105, 66], [66, 107],
-  [336, 296], [296, 334], [334, 293], [293, 300],
-  [168, 6], [6, 197], [197, 195], [195, 5], [5, 4], [4, 1], [1, 19],
-  [19, 94], [94, 2], [2, 164], [164, 0], [0, 11], [11, 12], [12, 13], [13, 14],
+const OUTLINE = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10];
+const LEFT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246, 33];
+const RIGHT_EYE = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466, 263];
+const MOUTH = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 78, 61];
+const NOSE = [168, 6, 197, 195, 5, 4, 1, 19, 94, 2];
+
+const GROUPS = [
+  { name: "face boundary", points: OUTLINE, color: "#60a5fa" },
+  { name: "eyes", points: LEFT_EYE, color: "#22c55e" },
+  { name: "eyes", points: RIGHT_EYE, color: "#22c55e" },
+  { name: "nose", points: NOSE, color: "#facc15" },
+  { name: "mouth", points: MOUTH, color: "#fb7185" },
 ];
 
-const FEATURE_POINTS = {
-  eyes: [33, 133, 362, 263, 159, 145, 386, 374],
-  nose: [168, 6, 197, 195, 5, 4, 1, 19, 94, 2],
-  mouth: [61, 291, 0, 17, 13, 14, 78, 308],
-  jaw: [234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454],
-};
+const SELECTED_POINTS = Array.from(
+  new Set([...OUTLINE, ...LEFT_EYE, ...RIGHT_EYE, ...MOUTH, ...NOSE])
+);
 
-function clamp(v, min, max) {
-  return Math.min(Math.max(v, min), max);
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }
 
-function getColor(index) {
-  if (FEATURE_POINTS.eyes.includes(index)) return "#38bdf8";
-  if (FEATURE_POINTS.nose.includes(index)) return "#22c55e";
-  if (FEATURE_POINTS.mouth.includes(index)) return "#fb7185";
-  if (FEATURE_POINTS.jaw.includes(index)) return "#a78bfa";
-  return "#facc15";
+function pointColor(index) {
+  if (LEFT_EYE.includes(index) || RIGHT_EYE.includes(index)) return "#22c55e";
+  if (MOUTH.includes(index)) return "#fb7185";
+  if (NOSE.includes(index)) return "#facc15";
+  if (OUTLINE.includes(index)) return "#60a5fa";
+  return "#cbd5e1";
 }
 
-function shiftPoint(p, index, noise) {
-  if (!p) return p;
-  const dx = ((index % 5) - 2) * noise * 0.0011;
-  const dy = (((index + 2) % 5) - 2) * noise * 0.0011;
+function shiftPoint(point, index, noise) {
+  if (!point) return point;
+  const dx = ((index % 5) - 2) * noise * 0.001;
+  const dy = (((index + 3) % 5) - 2) * noise * 0.001;
   return {
-    x: clamp(p.x + dx, 0, 1),
-    y: clamp(p.y + dy, 0, 1),
-    z: p.z || 0,
+    x: clamp(point.x + dx, 0, 1),
+    y: clamp(point.y + dy, 0, 1),
+    z: point.z || 0,
   };
 }
 
-function Pill({ children, active, danger }) {
+function Chip({ children, active, warning }) {
   return (
     <span
       style={{
-        padding: "9px 13px",
+        padding: "8px 11px",
         borderRadius: 999,
-        fontSize: 13,
-        fontWeight: 800,
-        border: `1px solid ${danger ? "#fecaca" : active ? "#bfdbfe" : "#e2e8f0"}`,
-        background: danger ? "#fff1f2" : active ? "#eff6ff" : "#f8fafc",
-        color: danger ? "#be123c" : active ? "#1d4ed8" : "#475569",
+        fontSize: 12,
+        fontWeight: 700,
+        border: `1px solid ${warning ? "#fed7aa" : active ? "#bfdbfe" : "#e2e8f0"}`,
+        background: warning ? "#fff7ed" : active ? "#eff6ff" : "#ffffff",
+        color: warning ? "#c2410c" : active ? "#1d4ed8" : "#475569",
       }}
     >
       {children}
@@ -77,20 +65,42 @@ function Pill({ children, active, danger }) {
   );
 }
 
-function Metric({ label, value, note }) {
+function Stat({ label, value, note }) {
   return (
     <div
       style={{
-        padding: 16,
-        borderRadius: 20,
-        border: "1px solid #e2e8f0",
-        background: "rgba(255,255,255,0.9)",
+        background: "#ffffff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 18,
+        padding: 14,
       }}
     >
-      <div style={{ color: "#64748b", fontSize: 13, fontWeight: 700 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{value}</div>
-      <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>{note}</div>
+      <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, marginTop: 5 }}>{value}</div>
+      <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4, marginTop: 4 }}>{note}</div>
     </div>
+  );
+}
+
+function Panel({ title, subtitle, children }) {
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 22,
+        padding: 16,
+        boxShadow: "0 12px 28px rgba(15,23,42,0.055)",
+      }}
+    >
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 18, lineHeight: 1.2 }}>{title}</h2>
+        <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13, lineHeight: 1.4 }}>
+          {subtitle}
+        </p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -114,13 +124,13 @@ export default function PrivacyFERPrototype() {
   const [error, setError] = useState("");
   const [frame, setFrame] = useState({ width: 960, height: 720 });
 
-  const exposure = privacyMode ? "Reduced" : "Visible";
-
-  const summary = useMemo(() => {
-    if (!cameraOn) return "Camera inactive";
-    if (!faceDetected) return "Scanning for face";
+  const status = useMemo(() => {
+    if (!cameraOn) return "Waiting for camera";
+    if (!faceDetected) return "Searching for face";
     return "Live graph generated";
   }, [cameraOn, faceDetected]);
+
+  const exposure = privacyMode ? "Reduced" : "Visible";
 
   useEffect(() => {
     let cancelled = false;
@@ -154,7 +164,7 @@ export default function PrivacyFERPrototype() {
         }
       } catch (e) {
         console.error(e);
-        setError("Model could not load. Refresh once or use the poster QR as backup.");
+        setError("The landmark model did not load. Refresh once before presenting.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -173,7 +183,7 @@ export default function PrivacyFERPrototype() {
     rafRef.current = null;
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
 
@@ -186,22 +196,14 @@ export default function PrivacyFERPrototype() {
     setFaceDetected(false);
     setLandmarkCount(0);
     clearCanvas(overlayRef);
-    clearCanvas(graphRef, "Enable camera to generate graph");
+    drawEmptyGraph();
   }
 
-  function clearCanvas(ref, text = "") {
+  function clearCanvas(ref) {
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (text) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "700 18px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-    }
   }
 
   async function startCamera() {
@@ -209,22 +211,25 @@ export default function PrivacyFERPrototype() {
       setError("");
 
       if (!modelReady) {
-        setError("Model is still loading. Try again in a few seconds.");
+        setError("Model is still loading. Wait a few seconds and try again.");
         return;
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
 
       streamRef.current = stream;
-      const video = videoRef.current;
-      video.srcObject = stream;
-      await video.play();
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
 
-      const width = video.videoWidth || 960;
-      const height = video.videoHeight || 720;
+      const width = videoRef.current.videoWidth || 960;
+      const height = videoRef.current.videoHeight || 720;
       setFrame({ width, height });
 
       [overlayRef.current, graphRef.current].forEach((canvas) => {
@@ -236,16 +241,35 @@ export default function PrivacyFERPrototype() {
 
       setCameraOn(true);
       lastTimeRef.current = -1;
-      loop();
+      runLoop();
     } catch (e) {
       console.error(e);
-      setError("Camera access failed. Allow browser camera permission.");
+      setError("Camera permission was blocked. Allow camera access and reload.");
     }
+  }
+
+  function drawEmptyGraph() {
+    const canvas = graphRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width || frame.width;
+    const height = canvas.height || frame.height;
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "700 22px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Graph view will appear here", width / 2, height / 2);
   }
 
   function drawOverlay(face) {
     const canvas = overlayRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     const { width, height } = frame;
 
@@ -255,52 +279,66 @@ export default function PrivacyFERPrototype() {
 
     if (!face) return;
 
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.75)";
-    ctx.lineWidth = 1.4;
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(255,255,255,0.75)";
 
-    CONNECTIONS.forEach(([a, b]) => {
-      if (!face[a] || !face[b]) return;
-      ctx.beginPath();
-      ctx.moveTo((1 - face[a].x) * width, face[a].y * height);
-      ctx.lineTo((1 - face[b].x) * width, face[b].y * height);
-      ctx.stroke();
+    GROUPS.forEach((group) => {
+      ctx.strokeStyle = group.color;
+      ctx.globalAlpha = 0.8;
+
+      for (let i = 0; i < group.points.length - 1; i++) {
+        const a = group.points[i];
+        const b = group.points[i + 1];
+        if (!face[a] || !face[b]) continue;
+
+        ctx.beginPath();
+        ctx.moveTo((1 - face[a].x) * width, face[a].y * height);
+        ctx.lineTo((1 - face[b].x) * width, face[b].y * height);
+        ctx.stroke();
+      }
     });
 
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    for (let i = 0; i < face.length; i += 8) {
-      const p = face[i];
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#ffffff";
+
+    SELECTED_POINTS.forEach((index) => {
+      const p = face[index];
+      if (!p) return;
       ctx.beginPath();
-      ctx.arc((1 - p.x) * width, p.y * height, 2.1, 0, Math.PI * 2);
+      ctx.arc((1 - p.x) * width, p.y * height, 2.2, 0, Math.PI * 2);
       ctx.fill();
-    }
+    });
   }
 
   function drawGraph(face) {
     const canvas = graphRef.current;
     if (!canvas) return;
+
     const ctx = canvas.getContext("2d");
     const { width, height } = frame;
 
     canvas.width = width;
     canvas.height = height;
+
     ctx.clearRect(0, 0, width, height);
 
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#020617");
-    gradient.addColorStop(0.55, "#0f172a");
-    gradient.addColorStop(1, "#111827");
-    ctx.fillStyle = gradient;
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, "#020617");
+    bg.addColorStop(1, "#172554");
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = "rgba(148,163,184,0.12)";
+    ctx.strokeStyle = "rgba(148,163,184,0.09)";
     ctx.lineWidth = 1;
-    for (let x = 0; x < width; x += 55) {
+
+    for (let x = 0; x < width; x += 70) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, height);
       ctx.stroke();
     }
-    for (let y = 0; y < height; y += 55) {
+
+    for (let y = 0; y < height; y += 70) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
@@ -311,87 +349,102 @@ export default function PrivacyFERPrototype() {
       ctx.fillStyle = "#94a3b8";
       ctx.font = "800 22px Arial";
       ctx.textAlign = "center";
-      ctx.fillText("Waiting for live facial structure", width / 2, height / 2);
+      ctx.fillText("Waiting for facial graph", width / 2, height / 2);
       return;
     }
 
-    const cx = width / 2;
-    const cy = height / 2;
-    const scale = 1.15;
+    const usable = SELECTED_POINTS.filter((i) => face[i]);
+    const xs = usable.map((i) => face[i].x);
+    const ys = usable.map((i) => face[i].y);
 
-    const xs = face.map((p) => p.x);
-    const ys = face.map((p) => p.y);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
 
-    function mapPoint(p, index) {
-      const q = shiftPoint(p, index, noise);
-      const nx = (q.x - minX) / (maxX - minX || 1);
-      const ny = (q.y - minY) / (maxY - minY || 1);
+    function map(index) {
+      const p = shiftPoint(face[index], index, noise);
+      const nx = (p.x - minX) / (maxX - minX || 1);
+      const ny = (p.y - minY) / (maxY - minY || 1);
+
       return {
-        x: cx + (0.5 - nx) * width * 0.42 * scale,
-        y: cy + (ny - 0.5) * height * 0.72 * scale,
-        z: q.z,
+        x: width * 0.5 + (0.5 - nx) * width * 0.62,
+        y: height * 0.53 + (ny - 0.5) * height * 0.72,
       };
     }
 
     ctx.save();
-    ctx.shadowColor = "rgba(59,130,246,0.45)";
-    ctx.shadowBlur = 8;
-    ctx.strokeStyle = "rgba(96,165,250,0.6)";
-    ctx.lineWidth = 1.5;
+    ctx.shadowColor = "rgba(96,165,250,0.7)";
+    ctx.shadowBlur = 10;
 
-    CONNECTIONS.forEach(([a, b]) => {
-      if (!face[a] || !face[b]) return;
-      const p1 = mapPoint(face[a], a);
-      const p2 = mapPoint(face[b], b);
+    GROUPS.forEach((group) => {
+      ctx.strokeStyle = group.color;
+      ctx.lineWidth = group.name === "face boundary" ? 2.2 : 1.9;
+      ctx.globalAlpha = 0.85;
 
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y);
-      ctx.lineTo(p2.x, p2.y);
-      ctx.stroke();
+      for (let i = 0; i < group.points.length - 1; i++) {
+        const a = group.points[i];
+        const b = group.points[i + 1];
+
+        if (!face[a] || !face[b]) continue;
+
+        const p1 = map(a);
+        const p2 = map(b);
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
     });
+
     ctx.restore();
 
-    for (let i = 0; i < face.length; i += 2) {
-      const p = mapPoint(face[i], i);
-      ctx.fillStyle = getColor(i);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, FEATURE_POINTS.jaw.includes(i) ? 2.2 : 2.8, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    SELECTED_POINTS.forEach((index) => {
+      if (!face[index]) return;
+      const p = map(index);
 
-    ctx.fillStyle = "rgba(15,23,42,0.75)";
-    ctx.fillRect(22, 22, 310, 44);
+      ctx.fillStyle = pointColor(index);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = "rgba(15,23,42,0.78)";
+    ctx.fillRect(24, 24, 355, 48);
+
     ctx.fillStyle = "#e0f2fe";
     ctx.font = "800 16px Arial";
     ctx.textAlign = "left";
-    ctx.fillText("Graph representation: identity reduced", 38, 50);
+    ctx.fillText("Structure-only graph representation", 42, 54);
 
     const legend = [
-      ["Eyes", "#38bdf8"],
-      ["Nose", "#22c55e"],
+      ["Face boundary", "#60a5fa"],
+      ["Eyes", "#22c55e"],
+      ["Nose", "#facc15"],
       ["Mouth", "#fb7185"],
-      ["Jawline", "#a78bfa"],
-      ["Other", "#facc15"],
     ];
 
-    legend.forEach(([label, color], idx) => {
-      const x = 38 + idx * 105;
-      const y = height - 34;
+    legend.forEach(([label, color], index) => {
+      const x = 42 + index * 142;
+      const y = height - 36;
+
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#cbd5e1";
+
+      ctx.fillStyle = "#dbeafe";
       ctx.font = "700 13px Arial";
-      ctx.fillText(label, x + 12, y + 4);
+      ctx.fillText(label, x + 13, y + 5);
     });
   }
 
-  function loop() {
+  function runLoop() {
     const video = videoRef.current;
     const landmarker = landmarkerRef.current;
 
@@ -404,150 +457,246 @@ export default function PrivacyFERPrototype() {
       const face = result.faceLandmarks?.[0];
 
       setFaceDetected(Boolean(face));
-      setLandmarkCount(face ? face.length : 0);
-      setGraphQuality(face ? Math.max(55, 100 - noise * 3) : 0);
+      setLandmarkCount(face ? SELECTED_POINTS.length : 0);
+      setGraphQuality(face ? Math.max(60, 100 - noise * 3) : 0);
 
       drawOverlay(face);
       drawGraph(face);
     }
 
-    rafRef.current = requestAnimationFrame(loop);
+    rafRef.current = requestAnimationFrame(runLoop);
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#eef4ff", color: "#0f172a", fontFamily: "Inter, system-ui, Arial" }}>
-      <div style={{ maxWidth: 1440, margin: "0 auto", padding: 24 }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-          <Pill active={modelReady}>{loading ? "Loading model" : "Model ready"}</Pill>
-          <Pill active={cameraOn}>{cameraOn ? "Camera active" : "Camera inactive"}</Pill>
-          <Pill active={faceDetected}>{faceDetected ? "Face detected" : "No face"}</Pill>
-          <Pill active={privacyMode} danger={!privacyMode}>{privacyMode ? "Privacy mode on" : "Raw visible"}</Pill>
-        </div>
-
-        <section
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#f4f7fb",
+        color: "#111827",
+        fontFamily: "Inter, system-ui, Arial, sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: 1360, margin: "0 auto", padding: "22px 24px 34px" }}>
+        <header
           style={{
-            background: "linear-gradient(135deg,#ffffff,#f8fbff)",
-            border: "1px solid #dbeafe",
-            borderRadius: 30,
-            padding: 28,
-            marginBottom: 22,
-            boxShadow: "0 18px 45px rgba(15,23,42,0.08)",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 18,
+            alignItems: "center",
+            marginBottom: 18,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
-            <div style={{ maxWidth: 850 }}>
-              <div style={{ display: "inline-block", padding: "9px 14px", borderRadius: 999, background: "#dbeafe", color: "#1d4ed8", fontWeight: 900, marginBottom: 14 }}>
-                Advanced live research prototype
-              </div>
-              <h1 style={{ fontSize: "clamp(2.4rem,5vw,4.6rem)", lineHeight: 1, margin: 0 }}>
-                Privacy-Preserving Facial Graph Analysis
-              </h1>
-              <p style={{ color: "#475569", fontSize: 19, lineHeight: 1.7, marginTop: 18 }}>
-                Live facial input is converted into a graph-based structural representation,
-                reducing dependence on identity-rich raw imagery while preserving useful facial structure.
-              </p>
+          <div>
+            <div style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+              Privacy-aware facial representation
             </div>
-
-            <div style={{ minWidth: 280, background: "#f8fafc", border: "1px solid #dbeafe", borderRadius: 24, padding: 20 }}>
-              <div style={{ color: "#64748b", fontWeight: 800 }}>System summary</div>
-              <div style={{ fontSize: 24, fontWeight: 950, marginTop: 8 }}>{summary}</div>
-              <div style={{ color: "#475569", lineHeight: 1.8, marginTop: 10 }}>
-                Landmarks: {landmarkCount}<br />
-                Graph quality: {graphQuality}%<br />
-                Identity exposure: {exposure}
-              </div>
-            </div>
+            <h1 style={{ margin: "4px 0 0", fontSize: 34, lineHeight: 1.05 }}>
+              Live Graph Abstraction Demo
+            </h1>
+            <p style={{ margin: "8px 0 0", color: "#64748b", maxWidth: 760, lineHeight: 1.55 }}>
+              The system keeps the live camera input separate from the graph view, showing how
+              facial structure can be used without depending on full identity-rich imagery.
+            </p>
           </div>
-        </section>
 
-        <main style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 22 }}>
-          <aside style={{ background: "#ffffff", border: "1px solid #dbeafe", borderRadius: 26, padding: 22, boxShadow: "0 14px 35px rgba(15,23,42,0.06)" }}>
-            <h2 style={{ margin: "0 0 16px", fontSize: 20 }}>Controls</h2>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Chip active={modelReady}>{loading ? "Loading model" : "Model ready"}</Chip>
+            <Chip active={cameraOn}>{cameraOn ? "Camera active" : "Camera inactive"}</Chip>
+            <Chip active={faceDetected}>{faceDetected ? "Face detected" : "No face"}</Chip>
+            <Chip active={privacyMode} warning={!privacyMode}>
+              {privacyMode ? "Privacy mode on" : "Raw visible"}
+            </Chip>
+          </div>
+        </header>
 
-            <button onClick={cameraOn ? stopCamera : startCamera} style={buttonStyle("#2563eb", "#ffffff")}>
+        <main
+          style={{
+            display: "grid",
+            gridTemplateColumns: "300px 1fr 1fr",
+            gap: 18,
+            alignItems: "start",
+          }}
+        >
+          <aside
+            style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: 22,
+              padding: 18,
+              boxShadow: "0 12px 28px rgba(15,23,42,0.055)",
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 18 }}>Demo controls</h2>
+            <p style={{ margin: "6px 0 16px", color: "#64748b", fontSize: 13, lineHeight: 1.45 }}>
+              Start with privacy mode on, then reveal the raw input only for comparison.
+            </p>
+
+            <button
+              onClick={cameraOn ? stopCamera : startCamera}
+              style={{
+                width: "100%",
+                border: "none",
+                borderRadius: 15,
+                background: "#2563eb",
+                color: "#ffffff",
+                padding: "14px 15px",
+                fontWeight: 800,
+                cursor: "pointer",
+                fontSize: 15,
+              }}
+            >
               {cameraOn ? "Stop camera" : "Enable camera"}
             </button>
 
-            <button onClick={() => setPrivacyMode((p) => !p)} style={{ ...buttonStyle("#ffffff", "#0f172a"), border: "1px solid #cbd5e1", marginTop: 12 }}>
+            <button
+              onClick={() => setPrivacyMode((prev) => !prev)}
+              style={{
+                width: "100%",
+                border: "1px solid #cbd5e1",
+                borderRadius: 15,
+                background: "#ffffff",
+                color: "#111827",
+                padding: "14px 15px",
+                fontWeight: 800,
+                cursor: "pointer",
+                fontSize: 15,
+                marginTop: 10,
+              }}
+            >
               {privacyMode ? "Show raw input" : "Hide raw input"}
             </button>
 
-            <div style={{ marginTop: 24 }}>
-              <label style={{ fontWeight: 900 }}>Landmark noise simulation: {noise}</label>
-              <input type="range" min="0" max="12" value={noise} onChange={(e) => setNoise(Number(e.target.value))} style={{ width: "100%", marginTop: 12 }} />
+            <div style={{ marginTop: 20 }}>
+              <label style={{ display: "block", fontWeight: 800, fontSize: 14 }}>
+                Landmark noise: {noise}
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="12"
+                value={noise}
+                onChange={(e) => setNoise(Number(e.target.value))}
+                style={{ width: "100%", marginTop: 10 }}
+              />
             </div>
 
-            <div style={{ marginTop: 24, padding: 16, borderRadius: 18, background: "#f8fafc", border: "1px solid #e2e8f0", lineHeight: 1.7, color: "#475569" }}>
-              <b>Pipeline</b><br />
-              Raw face → landmark detection → graph abstraction → reduced identity exposure
+            <div
+              style={{
+                marginTop: 18,
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: 16,
+                padding: 14,
+                color: "#475569",
+                fontSize: 13,
+                lineHeight: 1.65,
+              }}
+            >
+              <b style={{ color: "#111827" }}>Pipeline</b>
+              <br />
+              Raw face → facial landmarks → graph structure → reduced identity exposure
             </div>
 
-            {error && <div style={{ marginTop: 16, color: "#9a3412", background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 16, padding: 14 }}>{error}</div>}
+            {error && (
+              <div
+                style={{
+                  marginTop: 14,
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  borderRadius: 15,
+                  padding: 12,
+                  color: "#9a3412",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                {error}
+              </div>
+            )}
           </aside>
 
-          <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
-            <Panel title="Raw input" subtitle="Live webcam feed with landmark overlay">
-              <div style={mediaBox}>
-                <video ref={videoRef} playsInline muted autoPlay style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)", filter: privacyMode ? "blur(12px) brightness(0.7)" : "none", opacity: cameraOn ? 1 : 0.12 }} />
-                <canvas ref={overlayRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
-                {!cameraOn && <CenterText text="Camera inactive" />}
-              </div>
-            </Panel>
+          <Panel title="Raw input" subtitle="Live feed with selected facial structure overlay">
+            <div style={mediaBox}>
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: "scaleX(-1)",
+                  filter: privacyMode ? "blur(14px) brightness(0.68)" : "none",
+                  opacity: cameraOn ? 1 : 0.15,
+                  transition: "filter 180ms ease, opacity 180ms ease",
+                }}
+              />
+              <canvas
+                ref={overlayRef}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  pointerEvents: "none",
+                }}
+              />
+              {!cameraOn && <CenterText text="Camera inactive" />}
+            </div>
+          </Panel>
 
-            <Panel title="Graph abstraction" subtitle="Identity-reduced structural representation">
-              <div style={mediaBox}>
-                <canvas ref={graphRef} style={{ width: "100%", height: "100%", display: "block" }} />
-              </div>
-            </Panel>
-          </section>
+          <Panel title="Graph representation" subtitle="Selected structure-only nodes and edges">
+            <div style={mediaBox}>
+              <canvas
+                ref={graphRef}
+                width={frame.width}
+                height={frame.height}
+                style={{ width: "100%", height: "100%", display: "block" }}
+              />
+            </div>
+          </Panel>
         </main>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginTop: 22 }}>
-          <Metric label="Representation" value="Graph" note="Structure over raw identity appearance." />
-          <Metric label="Landmarks" value={landmarkCount} note="Detected facial structure points." />
-          <Metric label="Graph quality" value={`${graphQuality}%`} note="Stability under simulated noise." />
-          <Metric label="Exposure" value={exposure} note="Raw input visibility level." />
-        </div>
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 14,
+            marginTop: 18,
+          }}
+        >
+          <Stat label="Current state" value={status} note="Live pipeline status." />
+          <Stat label="Graph nodes" value={landmarkCount} note="Selected landmarks, not the full raw face." />
+          <Stat label="Graph quality" value={`${graphQuality}%`} note="Estimated stability under simulated noise." />
+          <Stat label="Identity exposure" value={exposure} note="Raw visual identity visibility." />
+        </section>
       </div>
-    </div>
-  );
-}
-
-function Panel({ title, subtitle, children }) {
-  return (
-    <div style={{ background: "#ffffff", border: "1px solid #dbeafe", borderRadius: 26, padding: 18, boxShadow: "0 14px 35px rgba(15,23,42,0.06)" }}>
-      <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
-      <p style={{ margin: "6px 0 14px", color: "#64748b", fontWeight: 600 }}>{subtitle}</p>
-      {children}
     </div>
   );
 }
 
 function CenterText({ text }) {
   return (
-    <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#cbd5e1", fontWeight: 900, fontSize: 20 }}>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "grid",
+        placeItems: "center",
+        color: "#cbd5e1",
+        fontWeight: 800,
+        fontSize: 18,
+      }}
+    >
       {text}
     </div>
   );
 }
 
-function buttonStyle(bg, color) {
-  return {
-    width: "100%",
-    padding: "15px 16px",
-    borderRadius: 16,
-    border: "none",
-    background: bg,
-    color,
-    cursor: "pointer",
-    fontWeight: 900,
-    fontSize: 16,
-  };
-}
-
 const mediaBox = {
   position: "relative",
-  borderRadius: 22,
+  borderRadius: 20,
   overflow: "hidden",
   border: "1px solid #dbeafe",
   background: "#0f172a",
